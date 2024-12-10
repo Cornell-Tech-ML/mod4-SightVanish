@@ -91,7 +91,34 @@ def _tensor_conv1d(
     s2 = weight_strides
 
     # TODO: Implement for Task 4.1.
-    raise NotImplementedError("Need to implement for Task 4.1")
+    for i in prange(out_size):
+        out_index: Index = np.empty(MAX_DIMS, np.int32)
+        to_index(i, out_shape, out_index)
+        cur_batch, curr_out, curr_w = out_index[: len(out_shape)]
+        out_pos = (
+            cur_batch * out_strides[0]
+            + curr_out * out_strides[1]
+            + curr_w * out_strides[2]
+        )
+        for curr_chanel in prange(in_channels):
+            for curr_kw in range(kw):
+                if reverse:
+                    curr_kw = kw - curr_kw - 1
+                weught = curr_out * s2[0] + curr_chanel * s2[1] + curr_kw * s2[2]
+                accum = 0.0
+                if reverse and 0 <= (curr_w - curr_kw):
+                    accum = input[
+                        cur_batch * s1[0]
+                        + curr_chanel * s1[1]
+                        + (curr_w - curr_kw) * s1[2]
+                    ]
+                elif not reverse and (curr_w + curr_kw) < width:
+                    accum = input[
+                        cur_batch * s1[0]
+                        + curr_chanel * s1[1]
+                        + (curr_w + curr_kw) * s1[2]
+                    ]
+                out[out_pos] += accum * weight[weught]
 
 
 tensor_conv1d = njit(_tensor_conv1d, parallel=True)
@@ -219,8 +246,48 @@ def _tensor_conv2d(
     s10, s11, s12, s13 = s1[0], s1[1], s1[2], s1[3]
     s20, s21, s22, s23 = s2[0], s2[1], s2[2], s2[3]
 
-    # TODO: Implement for Task 4.2.
-    raise NotImplementedError("Need to implement for Task 4.2")
+    for i in prange(out_size):
+        out_index: Index = np.empty(MAX_DIMS, np.int32)
+        to_index(i, out_shape, out_index)
+        curr_batch, curr_out, curr_h, curr_w = out_index[: len(out_shape)]
+        out_pos = (
+            curr_batch * out_strides[0]
+            + curr_out * out_strides[1]
+            + curr_h * out_strides[2]
+            + curr_w * out_strides[3]
+        )
+        for curr_chanel in prange(in_channels):
+            for curr_kh in range(kh):
+                for curr_kw in range(kw):
+                    if reverse:
+                        curr_kh = kh - curr_kh - 1
+                        curr_kw = kw - curr_kw - 1
+                    w_pos = (
+                        curr_out * s20
+                        + curr_chanel * s21
+                        + curr_kh * s22
+                        + curr_kw * s23
+                    )
+                    accum = 0.0
+                    if reverse and 0 <= (curr_h - curr_kh) and 0 <= (curr_w - curr_kw):
+                        accum = input[
+                            curr_batch * s10
+                            + curr_chanel * s11
+                            + (curr_h - curr_kh) * s12
+                            + (curr_w - curr_kw) * s13
+                        ]
+                    elif (
+                        not reverse
+                        and (curr_h + curr_kh) < height
+                        and (curr_w + curr_kw) < width
+                    ):
+                        accum = input[
+                            curr_batch * s10
+                            + curr_chanel * s11
+                            + (curr_h + curr_kh) * s12
+                            + (curr_w + curr_kw) * s13
+                        ]
+                    out[out_pos] += accum * weight[w_pos]
 
 
 tensor_conv2d = njit(_tensor_conv2d, parallel=True, fastmath=True)

@@ -41,7 +41,9 @@ class TensorOps:
     @staticmethod
     def reduce(
         fn: Callable[[float, float], float], start: float = 0.0
-    ) -> Callable[[Tensor, int], Tensor]: ...
+    ) -> Callable[[Tensor, int], Tensor]:
+        """Reduce placeholder"""
+        ...
 
     @staticmethod
     def matrix_multiply(a: Tensor, b: Tensor) -> Tensor:
@@ -58,7 +60,6 @@ class TensorBackend:
 
         Args:
             ops : tensor operations object see `tensor_ops.py`
-
 
         Returns:
             A collection of tensor functions
@@ -191,11 +192,11 @@ class SimpleOps(TensorOps):
                 for i:
                     out[1, j] = fn(out[1, j], a[i, j])
 
-
         Args:
             fn: function from two floats-to-float to apply
             a (:class:`TensorData`): tensor to reduce over
             dim (int): int of dim to reduce
+            start: starting value for reduction
 
         Returns:
             :class:`TensorData` : new tensor
@@ -261,7 +262,17 @@ def tensor_map(
         in_shape: Shape,
         in_strides: Strides,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        out_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+        in_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+        # go through all index, starting from [0,0,0]
+        for ordinal in range(len(out)):
+            # ordinal -> index
+            to_index(ordinal, out_shape, out_index)
+            broadcast_index(out_index, out_shape, in_shape, in_index)
+            # index -> real ordinal in memory
+            o = index_to_position(out_index, out_strides)
+            j = index_to_position(in_index, in_strides)
+            out[o] = fn(in_storage[j])
 
     return _map
 
@@ -305,7 +316,20 @@ def tensor_zip(
         b_shape: Shape,
         b_strides: Strides,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        out_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+        a_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+        b_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+        # go through all index, starting from [0,0,0]
+        for ordinal in range(len(out)):
+            # ordinal -> index
+            to_index(ordinal, out_shape, out_index)
+            broadcast_index(out_index, out_shape, a_shape, a_index)
+            broadcast_index(out_index, out_shape, b_shape, b_index)
+            # index -> real ordinal in memory
+            o = index_to_position(out_index, out_strides)
+            j = index_to_position(a_index, a_strides)
+            k = index_to_position(b_index, b_strides)
+            out[o] = fn(a_storage[j], b_storage[k])
 
     return _zip
 
@@ -335,7 +359,19 @@ def tensor_reduce(
         a_strides: Strides,
         reduce_dim: int,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        out_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+        reduce_size = a_shape[reduce_dim]
+        # go through all index, starting from [0,0,0]
+        for ordinal in range(len(out)):
+            # ordinal -> index
+            to_index(ordinal, out_shape, out_index)
+            o = index_to_position(out_index, out_strides)
+            # reduce dimension
+            for i in range(reduce_size):
+                # find the corresponding index in a
+                out_index[reduce_dim] = i
+                j = index_to_position(out_index, a_strides)
+                out[o] = fn(out[o], a_storage[j])
 
     return _reduce
 

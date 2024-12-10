@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import random
+
+# from turtle import shearfactor
 from typing import Iterable, Optional, Sequence, Tuple, Union
 
 import numba
@@ -44,7 +46,10 @@ def index_to_position(index: Index, strides: Strides) -> int:
         Position in storage
 
     """
-    raise NotImplementedError("Need to include this file from past assignment.")
+    pos = 0
+    for i, s in zip(index, strides):
+        pos += i * s
+    return pos
 
 
 def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
@@ -59,7 +64,11 @@ def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
         out_index : return index corresponding to position.
 
     """
-    raise NotImplementedError("Need to include this file from past assignment.")
+    temp = ordinal + 0  # +0 to make a copy instead of reference
+    # start from the last dimension
+    for i in range(len(shape) - 1, -1, -1):
+        out_index[i] = temp % shape[i]
+        temp = temp // shape[i]
 
 
 def broadcast_index(
@@ -81,7 +90,11 @@ def broadcast_index(
         None
 
     """
-    raise NotImplementedError("Need to include this file from past assignment.")
+    for i, s in enumerate(shape):
+        if s == 1:
+            out_index[i] = 0
+        else:
+            out_index[i] = big_index[i + len(big_shape) - len(shape)]
 
 
 def shape_broadcast(shape1: UserShape, shape2: UserShape) -> UserShape:
@@ -98,7 +111,17 @@ def shape_broadcast(shape1: UserShape, shape2: UserShape) -> UserShape:
         IndexingError : if cannot broadcast
 
     """
-    raise NotImplementedError("Need to include this file from past assignment.")
+    broadcasted_shape = []
+    if len(shape2) > len(shape1):
+        shape1, shape2 = shape2, shape1
+    shape2 = [1] * (len(shape1) - len(shape2)) + list(shape2)
+
+    for i in range(len(shape1)):
+        if shape1[i] != shape2[i] and shape1[i] != 1 and shape2[i] != 1:
+            raise IndexingError(f"Broadcast failed {shape1} {shape2}")
+        else:
+            broadcasted_shape.append(max(shape1[i], shape2[i]))
+    return tuple(broadcasted_shape)
 
 
 def strides_from_shape(shape: UserShape) -> UserStrides:
@@ -166,9 +189,11 @@ class TensorData:
 
     @staticmethod
     def shape_broadcast(shape_a: UserShape, shape_b: UserShape) -> UserShape:
+        """Broadcast two shapes to create a new union shape."""
         return shape_broadcast(shape_a, shape_b)
 
     def index(self, index: Union[int, UserIndex]) -> int:
+        """Convert the index to a position in the storage."""
         if isinstance(index, int):
             aindex: Index = array([index])
         else:  # if isinstance(index, tuple):
@@ -192,6 +217,7 @@ class TensorData:
         return index_to_position(array(index), self._strides)
 
     def indices(self) -> Iterable[UserIndex]:
+        """Generate all valid indices for the tensor."""
         lshape: Shape = array(self.shape)
         out_index: Index = array(self.shape)
         for i in range(self.size):
@@ -203,10 +229,12 @@ class TensorData:
         return tuple((random.randint(0, s - 1) for s in self.shape))
 
     def get(self, key: UserIndex) -> float:
+        """Get the value at a given index."""
         x: float = self._storage[self.index(key)]
         return x
 
     def set(self, key: UserIndex, val: float) -> None:
+        """Set the value at a given index."""
         self._storage[self.index(key)] = val
 
     def tuple(self) -> Tuple[Storage, Shape, Strides]:
@@ -223,11 +251,16 @@ class TensorData:
             New `TensorData` with the same storage and a new dimension order.
 
         """
+        # suppose permute(1, 2, 0), original element x[i, j, k] will be moved to x[j, k, i]
         assert list(sorted(order)) == list(
             range(len(self.shape))
         ), f"Must give a position to each dimension. Shape: {self.shape} Order: {order}"
 
-        raise NotImplementedError("Need to include this file from past assignment.")
+        return TensorData(
+            self._storage,
+            tuple([self.shape[i] for i in order]),
+            tuple([self.strides[i] for i in order]),
+        )
 
     def to_string(self) -> str:
         """Convert to string"""
