@@ -149,3 +149,6 @@ unfixable = []
 
 [tool.ruff.extend-per-file-ignores]
 "tests/**/*.py" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+    convention = "google"

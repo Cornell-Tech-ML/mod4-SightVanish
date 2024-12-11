@@ -22,6 +22,7 @@ Fn = TypeVar("Fn")
 
 
 def njit(fn: Fn, **kwargs: Any) -> Fn:
+    """Decorator to JIT compile functions with NUMBA."""
     return _njit(inline="always", **kwargs)(fn)  # type: ignore
 
 
@@ -90,8 +91,45 @@ def _tensor_conv1d(
     s1 = input_strides
     s2 = weight_strides
 
-    # TODO: Implement for Task 4.1.
-    raise NotImplementedError("Need to implement for Task 4.1")
+    # Iterate over each output element
+    for i in prange(out_size):
+        # Calculate the multi-dimensional index for the current output element
+        out_index: Index = np.empty(MAX_DIMS, np.int32)
+        to_index(i, out_shape, out_index)
+        batch_idx, out_channel_idx, out_pos = out_index[: len(out_shape)]
+
+        # Calculate the memory offset for the output element
+        out_offset = (
+            batch_idx * out_strides[0]
+            + out_channel_idx * out_strides[1]
+            + out_pos * out_strides[2]
+        )
+
+        # Accumulate contributions for the current output element
+        for in_channel_idx in prange(in_channels):
+            for kernel_pos in range(kw):
+                # Adjust kernel position for reverse mode
+                actual_kernel_pos = kw - kernel_pos - 1 if reverse else kernel_pos
+
+                # Determine the corresponding input position
+                input_pos = out_pos - kernel_pos if reverse else out_pos + kernel_pos
+
+                # Skip if the input position is out of bounds
+                if input_pos < 0 or input_pos >= width:
+                    continue
+
+                # Calculate memory offsets for input and weight elements
+                input_offset = (
+                    batch_idx * s1[0] + in_channel_idx * s1[1] + input_pos * s1[2]
+                )
+                weight_offset = (
+                    out_channel_idx * s2[0]
+                    + in_channel_idx * s2[1]
+                    + actual_kernel_pos * s2[2]
+                )
+
+                # Accumulate the result
+                out[out_offset] += input[input_offset] * weight[weight_offset]
 
 
 tensor_conv1d = njit(_tensor_conv1d, parallel=True)
@@ -127,6 +165,7 @@ class Conv1dFun(Function):
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute gradients for 1D Convolution"""
         input, weight = ctx.saved_values
         batch, in_channels, w = input.shape
         out_channels, in_channels, kw = weight.shape
@@ -219,8 +258,64 @@ def _tensor_conv2d(
     s10, s11, s12, s13 = s1[0], s1[1], s1[2], s1[3]
     s20, s21, s22, s23 = s2[0], s2[1], s2[2], s2[3]
 
-    # TODO: Implement for Task 4.2.
-    raise NotImplementedError("Need to implement for Task 4.2")
+    # Iterate over each element in the output tensor
+    for i in prange(out_size):
+        # Calculate the multi-dimensional index for the output tensor
+        out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
+        to_index(i, out_shape, out_index)
+        batch_idx, out_channel_idx, out_h, out_w = out_index[: len(out_shape)]
+
+        # Calculate memory offset for the current output element
+        out_offset = (
+            batch_idx * out_strides[0]
+            + out_channel_idx * out_strides[1]
+            + out_h * out_strides[2]
+            + out_w * out_strides[3]
+        )
+
+        # Initialize accumulation for the current output element
+        accumulated_value = 0.0
+
+        # Iterate over input channels and kernel dimensions
+        for in_channel_idx in prange(in_channels):
+            for kernel_h in range(kh):
+                for kernel_w in range(kw):
+                    # Adjust kernel position for reverse mode
+                    actual_kernel_h = kh - kernel_h - 1 if reverse else kernel_h
+                    actual_kernel_w = kw - kernel_w - 1 if reverse else kernel_w
+
+                    # Calculate input position
+                    input_h = out_h - kernel_h if reverse else out_h + kernel_h
+                    input_w = out_w - kernel_w if reverse else out_w + kernel_w
+
+                    # Skip out-of-bounds input positions
+                    if (
+                        input_h < 0
+                        or input_h >= height
+                        or input_w < 0
+                        or input_w >= width
+                    ):
+                        continue
+
+                    # Calculate memory offsets for input and weight tensors
+                    input_offset = (
+                        batch_idx * s10
+                        + in_channel_idx * s11
+                        + input_h * s12
+                        + input_w * s13
+                    )
+                    weight_offset = (
+                        out_channel_idx * s20
+                        + in_channel_idx * s21
+                        + actual_kernel_h * s22
+                        + actual_kernel_w * s23
+                    )
+
+                    # Accumulate the convolution result
+                    accumulated_value += input[input_offset] * weight[weight_offset]
+
+        # Store the accumulated value in the output tensor
+        out[out_offset] += accumulated_value
 
 
 tensor_conv2d = njit(_tensor_conv2d, parallel=True, fastmath=True)
@@ -254,6 +349,7 @@ class Conv2dFun(Function):
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute gradients for 2D Convolution"""
         input, weight = ctx.saved_values
         batch, in_channels, h, w = input.shape
         out_channels, in_channels, kh, kw = weight.shape
