@@ -74,6 +74,9 @@ def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
     return input.mean(4).view(batch, channel, new_height, new_width)
 
 
+reduce_max = FastOps.reduce(operators.max, -1e9)
+
+
 def argmax(input: Tensor, dim: int) -> Tensor:
     """Find the indices of the maximum values along a dimension.
 
@@ -86,7 +89,7 @@ def argmax(input: Tensor, dim: int) -> Tensor:
     -------
         Tensor with boolean mask where maximum values are `True`.
     """
-    out = FastOps.reduce(operators.max, float("-inf"))(input, dim)
+    out = reduce_max(input, dim)
     return out == input
 
 
@@ -95,14 +98,14 @@ class Max(Function):
     def forward(ctx: Context, input: Tensor, dim: Tensor) -> Tensor:
         """Forward pass for the max"""
         ctx.save_for_backward(input, dim)
-        return FastOps.reduce(operators.max, float("-inf"))(input, int(dim.item()))
+        return reduce_max(input, int(dim.item()))
 
     # int(dim[0])
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
         """Backward pass for the max"""
         input, dim = ctx.saved_values
-        return grad_output * argmax(input, dim), 0.0
+        return grad_output * argmax(input, int(dim.item())), 0.0
 
 
 def max(input: Tensor, dim: int) -> Tensor:
