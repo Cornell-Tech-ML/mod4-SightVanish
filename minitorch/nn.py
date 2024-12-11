@@ -4,7 +4,7 @@ from . import operators
 from .autodiff import Context
 from .fast_ops import FastOps
 from .tensor import Tensor
-from .tensor_functions import Function, rand, tensor
+from .tensor_functions import Function, rand
 
 
 # List of functions in this file:
@@ -35,17 +35,26 @@ def tile(input: Tensor, kernel: Tuple[int, int]) -> Tuple[Tensor, int, int]:
     kh, kw = kernel
     assert height % kh == 0
     assert width % kw == 0
-    # TODO: Implement for Task 4.3.
-    
-    input = (
+
+    # Reshape the input tensor
+    reshaped_input = (
         input.contiguous()
-        .view(batch, channel, height, int(width / kw), kw)
-        .permute(0, 1, 3, 2, 4)
+        .view(
+            batch, channel, height // kh, kh, width // kw, kw
+        )  # Split height and width into blocks
+        .permute(0, 1, 2, 4, 3, 5)  # Rearrange axes to bring kernel dimensions together
     )
-    input = input.contiguous().view(
-        batch, channel, int(width / kw), int(height / kh), kh * kw
+
+    # Combine kernel dimensions into a single axis
+    reshaped_input = reshaped_input.contiguous().view(
+        batch, channel, height // kh, width // kw, kh * kw
     )
-    return (input, int(height / kh), int(width / kw))
+
+    # Compute new height and width for the reshaped tensor
+    new_height = height // kh
+    new_width = width // kw
+
+    return reshaped_input, new_height, new_width
 
 
 def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
@@ -63,7 +72,8 @@ def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
     batch, channel, height, width = input.shape
     input, new_height, new_width = tile(input, kernel)
     return input.mean(4).view(batch, channel, new_height, new_width)
-    
+
+
 def argmax(input: Tensor, dim: int) -> Tensor:
     """Find the indices of the maximum values along a dimension.
 
@@ -76,44 +86,50 @@ def argmax(input: Tensor, dim: int) -> Tensor:
     -------
         Tensor with boolean mask where maximum values are `True`.
     """
-    out = FastOps.reduce(operators.max, float('-inf'))(input, dim)
+    out = FastOps.reduce(operators.max, float("-inf"))(input, dim)
     return out == input
-    
+
+
 class Max(Function):
     @staticmethod
     def forward(ctx: Context, input: Tensor, dim: Tensor) -> Tensor:
-        "Forward of max should be max reduction"
-        # TODO: Implement for Task 4.4.
-        # raise NotImplementedError("Need to implement for Task 4.4")
-        ctx.save_for_backward(input, int(dim.item()))
-        return FastOps.reduce(operators.max, float('-inf'))(input, int(dim.item()))
+        """Forward pass for the max"""
+        ctx.save_for_backward(input, dim)
+        return FastOps.reduce(operators.max, float("-inf"))(input, int(dim.item()))
 
     # int(dim[0])
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
-        "Backward of max should be argmax (see above)"
-        # TODO: Implement for Task 4.4.
-        # raise NotImplementedError("Need to implement for Task 4.4")
+        """Backward pass for the max"""
         input, dim = ctx.saved_values
         return grad_output * argmax(input, dim), 0.0
 
 
 def max(input: Tensor, dim: int) -> Tensor:
+    """Apply max reduction along a dimension."""
     return Max.apply(input, input._ensure_tensor(dim))
 
+
 def softmax(input: Tensor, dim: int) -> Tensor:
+    """Compute the softmax as a tensor."""
     return input.exp() / input.exp().sum(dim=dim)
 
+
 def logsoftmax(input: Tensor, dim: int) -> Tensor:
+    """Compute the log of the softmax as a tensor."""
     return input - (input - max(input, dim)).exp().sum(dim).log() - max(input, dim)
 
+
 def maxpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
+    """Perform 2D max pooling on an input tensor."""
     batch, channel, height, width = input.shape
     out, new_height, new_width = tile(input, kernel)
     out = max(out, len(out.shape) - 1)
     return out.view(batch, channel, new_height, new_width)
 
+
 def dropout(input: Tensor, rate: float, ignore: bool = False) -> Tensor:
+    """Dropout positions based on random noise, include an argument to turn off."""
     if ignore:
         return input
     else:

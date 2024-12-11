@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ast import In
 from typing import TYPE_CHECKING, TypeVar, Any
 
 import numpy as np
@@ -177,7 +176,6 @@ def tensor_map(
                 out[ordinal] = fn(in_storage[ordinal])
         else:
             for ordinal in prange(len(out)):
-                
                 out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
                 in_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
                 # ordinal -> index
@@ -286,7 +284,7 @@ def tensor_reduce(
     ) -> None:
         for ordinal in prange(len(out)):
             out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
-            
+
             # ordinal -> index
             to_index(ordinal, out_shape, out_index)
             o = index_to_position(out_index, out_strides)
@@ -298,7 +296,7 @@ def tensor_reduce(
             for _ in range(reduce_size):
                 # find the corresponding index in a
                 accum = fn(accum, a_storage[j])
-                
+
                 j += step
             # write the result back to out
             out[o] = accum
@@ -366,7 +364,9 @@ def _tensor_matrix_multiply(
                         a_storage[a_pos + n * a_strides[2]]
                         * b_storage[b_pos + n * b_strides[1]]
                     )
-                out[i * out_strides[0] + j * out_strides[1] + k * out_strides[2]] = accum
+                out[i * out_strides[0] + j * out_strides[1] + k * out_strides[2]] = (
+                    accum
+                )
 
 
 tensor_matrix_multiply = njit(_tensor_matrix_multiply, parallel=True)

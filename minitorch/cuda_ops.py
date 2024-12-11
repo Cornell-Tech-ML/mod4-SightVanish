@@ -272,9 +272,9 @@ def _sum_practice(out: Storage, a: Storage, size: int) -> None:
         val = float(a[i])
         cache[pos] = val
         cuda.syncthreads()
-    else: 
+    else:
         cache[pos] = 0.0
-    
+
     # reduction within this block
     if i < size:
         for j in [1, 2, 4, 8, 16]:
@@ -343,15 +343,14 @@ def tensor_reduce(
                 cache[pos] = a_storage[in_a]
                 cuda.syncthreads()
                 x = 0
-                while 2 ** x < BLOCK_DIM:
-                    j =  2 ** x
-                    if pos % (j * 2)  == 0:
+                while 2**x < BLOCK_DIM:
+                    j = 2**x
+                    if pos % (j * 2) == 0:
                         cache[pos] = fn(cache[pos], cache[pos + j])
                         cuda.syncthreads()
                     x += 1
             if pos == 0:
                 out[o] = cache[0]
-
 
     return cuda.jit(_reduce)  # type: ignore
 
@@ -394,7 +393,7 @@ def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
     # j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
     # if i >= size and j >= size:
     #     return
-    
+
     # cache_a[i, j] = a[i * size + j]
     # cache_b[i, j] = b[i * size + j]
     # cuda.syncthreads()
@@ -411,7 +410,7 @@ def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
     j = cuda.threadIdx.y
     if i >= size and j >= size:
         return
-    
+
     cache_a[i, j] = a[i * size + j]
     cache_b[i, j] = b[i * size + j]
     cuda.syncthreads()
@@ -498,11 +497,11 @@ def _tensor_matrix_multiply(
     #             batch * b_batch_stride + k * b_strides[1] + j * b_strides[2]
     #         ]
     #     cuda.syncthreads()
-        
+
     #     for k in range(BLOCK_DIM):
     #         if (k_start + k) < a_shape[2]:
     #             accum += a_shared[pi, k] * b_shared[k, pj]
-    
+
     # if i < out_shape[1] and j < out_shape[2]:
     #     out[out_strides[0] * batch + i * out_strides[1] + j * out_strides[2]] = accum
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
@@ -538,7 +537,7 @@ def _tensor_matrix_multiply(
     # raise NotImplementedError("Need to implement for Task 3.4")
     # NOTE I took refernce form this numba docs and heaily from the GPU Puzzlers
     # Reference link: https://numba.readthedocs.io/en/stable/cuda/examples.html#matrix-multiplication
-    # Reference code from GPU Puzzlers for this and other cuda functions 
+    # Reference code from GPU Puzzlers for this and other cuda functions
 
     # 1) Move across shared dimension by block dim.
     for s in range(0, MAX_BLOCKS, BLOCK_DIM):  # Loops over each block
